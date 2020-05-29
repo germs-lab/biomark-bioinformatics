@@ -8,3 +8,9 @@
 6.  Metadata:  Each row should be unique in the metadata, an example is shown in the metadata folder.  Your sample name header should be "Name".  You should have as many rows in your metadata (besides the header) as unique Name in your data table.
 7.  Standards:  Concentrations of standards should be in the biomark output, or at least that is how this program works, it assumes your rConc is accurate in your data table
 
+*Notes any typos in the standards will break this program!  So you want to make sure all names are consistent throughout.
+
+A summary of how the program works is that it merges the metadata of samples to the biomark data observed on them.
+It also subsets the standards (by gene and plate) and produces the standard curves for them.
+
+
