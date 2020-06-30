@@ -1,15 +1,15 @@
 Name,soil_type,plot,treatment,block,sample_day,sample_number,sample_type
-16S_Eub_338_518_STD,na,na,na,na,na,na,standard
-aadA9_STD,na,na,na,na,na,na,standard
-erm(C)_STD,na,na,na,na,na,na,standard
-int-a-marko_STD,na,na,na,na,na,na,standard
-intl1F165_clinical_STD,na,na,na,na,na,na,standard
-IS6100_STD,na,na,na,na,na,na,standard
-strB_STD,na,na,na,na,na,na,standard
-sul1 NEW_STD,na,na,na,na,na,na,standard
-sul2_STD,na,na,na,na,na,na,standard
-tetbP_STD,na,na,na,na,na,na,standard
-tetG_F_STD,na,na,na,na,na,na,standard
+16S_Eub_338_518,na,na,na,na,na,na,standard
+aadA9,na,na,na,na,na,na,standard
+erm(C),na,na,na,na,na,na,standard
+int-a-marko,na,na,na,na,na,na,standard
+intI1F165_clinical,na,na,na,na,na,na,standard
+IS6100,na,na,na,na,na,na,standard
+strB,na,na,na,na,na,na,standard
+sul1 NEW,na,na,na,na,na,na,standard
+sul2,na,na,na,na,na,na,standard
+tetbP,na,na,na,na,na,na,standard
+tetG_F,na,na,na,na,na,na,standard
 P1_1,na,1,WCS,1,T00,1,water
 P1_2,na,1,WCS,1,T00,2,water
 P1_3,na,1,WCS,1,T00,3,water
@@ -29,11 +29,11 @@ Supply_Water,na,na,na,na,T00,na,water
 IPC_1,na,na,na,na,na,na,control
 IPC_2,na,na,na,na,na,na,control
 NTC,na,na,na,na,na,na,control
-tetH_STD,na,na,na,na,na,na,standard
-tetL_STD,na,na,na,na,na,na,standard
-tetM_STD,na,na,na,na,na,na,standard
-tetT_STD,na,na,na,na,na,na,standard
-tetW_STD,na,na,na,na,na,na,standard
+tetH,na,na,na,na,na,na,standard
+tetL,na,na,na,na,na,na,standard
+tetM,na,na,na,na,na,na,standard
+tetT,na,na,na,na,na,na,standard
+tetW,na,na,na,na,na,na,standard
 P3_1,na,3,WCS,3,T00,1,water
 P3_2,na,3,WCS,3,T00,2,water
 P3_3,na,3,WCS,3,T00,3,water
@@ -78,7 +78,7 @@ P9_5,na,9,WCM,3,T00,5,water
 P9_6,na,9,WCM,3,T00,6,water
 C_1_TB_1,crop,1,WCS,1,TB,1,soil
 C_1_TB_2,crop,1,WCS,1,TB,2,soil
-tetX_STD,na,na,na,na,na,na,standard
+tetX,na,na,na,na,na,na,standard
 B_1_TB_1,border,1,WCS,1,TB,1,soil
 B_2_TB_1,border,2,WCS,2,TB,1,soil
 B_3_TB_1,border,3,WCS,3,TB,1,soil
