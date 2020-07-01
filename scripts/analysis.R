@@ -4,7 +4,7 @@ library(uniqtag)
 library(ggplot2)
 
 setwd("~/Downloads/biomark-private/")
-raw_data_file = "combined.cleaned.csv"
+raw_data_file = "~/Downloads/biomark-private/combined.cleaned.csv"
 raw_data <- read.csv(raw_data_file, sep=",", header = FALSE)
 header = c('ID','Name','Type','rConc','Name.1','Type','Value','Calibrated rConc','Quality','Call','Threshold','In Range','Out Range','Peak Ratio', 'Plate')
 colnames(raw_data) <- header
@@ -17,7 +17,7 @@ raw_data$unique_id <- make_unique(raw_data$full_assay)
 # Metadata fie has to have a header names "sample_type" where you specify standards or env sample
 # You should have metadata for both samples and standards
 # It would be better if the "standard sample" had the appropriate dilution
-meta_data_file = "meta/Worle_biomark_meta.cleaned.csv"
+meta_data_file = "~/Downloads/biomark-private/meta/Worle_biomark_meta.csv"
 meta <- read.csv(meta_data_file, header=TRUE)
 
 
@@ -48,8 +48,8 @@ for (x in 1:length(gene_list)) {
    each_gene_filtered = subset(each_gene, full_assay == standard_only)
    each_gene_filtered = subset(each_gene_filtered, Value < 500)
    each_gene_badfiltered = subset(each_gene, full_assay != standard_only)
-   each_gene_badfiltered = subset(each_gene_badfiltered, Value < 999)
-   f <- ddply(each_gene_filtered, .(Plate, rConc, full_assay), summarise, MEAN = mean(Value), SE=sd(Value)/sqrt(length(Value)))
+   
+   f <- ddply(each_gene_filtered, .(rConc, full_assay, Plate), summarise, MEAN = mean(Value), SE=sd(Value)/sqrt(length(Value)))
    limits<-aes(ymin=MEAN-SE, ymax=MEAN+SE)
    f$log <- log10(f$rConc)
    p = ggplot(f, aes_string(x="log", y="MEAN", color="Plate")) + geom_point() + geom_errorbar(limits)+theme(axis.text.x = element_text(angle = 90))
