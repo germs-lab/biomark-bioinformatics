@@ -1,10 +1,12 @@
-#devtools::install_github("sjackman/uniqtag")
+devtools::install_github("sjackman/uniqtag")
 library(plyr)
 library(uniqtag)
 library(ggplot2)
+library(tidyverse)
 
-setwd("~/Downloads/biomark-private/")
-raw_data_file = "~/Downloads/biomark-private/combined.cleaned.csv"
+# I cloned the repo to my desktop
+setwd("~/Desktop/biomark-private/") # Change path to where you cloned the repo to
+raw_data_file = "~/Desktop/biomark-private/combined.cleaned.csv"
 raw_data <- read.csv(raw_data_file, sep=",", header = FALSE)
 header = c('ID','Name','Type','rConc','Name.1','Type','Value','Calibrated rConc','Quality','Call','Threshold','In Range','Out Range','Peak Ratio', 'Plate')
 colnames(raw_data) <- header
@@ -17,7 +19,7 @@ raw_data$unique_id <- make_unique(raw_data$full_assay)
 # Metadata fie has to have a header names "sample_type" where you specify standards or env sample
 # You should have metadata for both samples and standards
 # It would be better if the "standard sample" had the appropriate dilution
-meta_data_file = "~/Downloads/biomark-private/meta/Worle_biomark_meta.csv"
+meta_data_file = "~/Desktop/biomark-private/meta/Worle_biomark_meta.csv"
 meta <- read.csv(meta_data_file, header=TRUE)
 
 
@@ -85,6 +87,7 @@ limits2<-aes(ymin=MEAN2-SE2, ymax=MEAN2+SE2)
 p = ggplot(f2, aes_string(x="Name.1", y="MEAN2", color="Name.1"))
 p + geom_point() + geom_errorbar(width=0.25, limits2)+theme_classic()+ theme(text=element_text(size=15, family="Helvetica"),axis.text.x = element_text(angle = 90), legend.position="none") + facet_grid(sample_day~treatment)
 
+
 samples <- subset(merged, sample_type != "standard") #all samples
 water <- subset(samples, sample_type == "soil")
 water <- subset(water, Value < 100)
@@ -150,5 +153,139 @@ for(k in 1:length(smple_v)) {
   #can update function here if a different means of normalizing is desired (e.g., max)
   f2$housekeeping_abund[smple_r]<-smple_abun #assign housekeeper abundance for sample to all rows from sample
 }
+####
+####
+####
+# Water samples were collected over time, we can visualize the decrease in ARG with time:
+# Tet genes example
+# Filter tet genes and select columns
+
+# New facet label names for treatment variable
+trt.labs <- c("WCM \n (manured crop)", "WCSM \n (manured strip)")
+names(trt.labs) <- c("WCM", "WCSM")
+tet <- water %>%
+  filter(grepl("tet",Name.1), treatment != "WCS") %>%
+  select(Name, Name.1, Value, plot, treatment, sample_number) 
+# Group by and summarize (adding mean and SD to data)
+tetsd <- tet %>%
+  group_by(sample_number, Name.1, treatment) %>%
+  summarize(mean_size = mean(Value, na.rm = TRUE), Sd=sqrt(var(Value))) 
+
+#merge 
+tetdata <- merge(tet, tetsd)
+pd <- position_dodge(width = 0.4)
+
+#plot
+t <- ggplot(tetdata, aes(x = sample_number, y = mean_size, color = Name.1, group = Name.1)) +
+  geom_errorbar(aes(ymin = mean_size-Sd, ymax = mean_size+Sd), alpha = 0.15, position = pd) +
+  geom_line(size = 2, position = pd) +
+  geom_point(size = 2, position = pd) +
+  facet_grid(~treatment, labeller = labeller(treatment = trt.labs)) +
+  scale_y_reverse() +
+  theme_minimal() +
+  scale_color_viridis_d() +
+  labs(color = "ARG", y = "Mean concentration", x = "Water sample \n -> time increasing since runoff achieved", title = "tet genes in water")
+t
+ggsave(plot = t, filename = "plots/tetwater.png", width = 8, height = 8, device = "png")  
+
+# sul genes example
+sul <- water %>%
+  filter(grepl("sul",Name.1), treatment != "WCS") %>%
+  select(Name, Name.1, Value, plot, treatment, sample_number) 
+
+sulsd <- sul %>%
+  group_by(sample_number, Name.1, treatment) %>%
+  summarize(mean_size = mean(Value, na.rm = TRUE), Sd=sqrt(var(Value))) 
+
+suldata <- merge(sul, sulsd)
+
+s <- ggplot(suldata, aes(x = sample_number, y = mean_size, color = Name.1, group = Name.1)) +
+  geom_errorbar(aes(ymin = mean_size-Sd, ymax = mean_size+Sd), alpha = 0.15, position = pd) +
+  geom_line(size = 2, position = pd) +
+  geom_point(size = 2, position = pd) +
+  facet_grid(~treatment, labeller = labeller(treatment = trt.labs)) +
+  scale_y_reverse() +
+  theme_minimal() +
+  scale_color_viridis_d() +
+  labs(color = "ARG", y = "Mean concentration", x = "Water sample \n -> time increasing since runoff achieved", title = "sul genes in water")
+ggsave(plot = s, filename =  "plots/sulwater.png", width = 8, height = 8, device = "png")  
 
 
+
+# erm genes example
+erm <- water %>%
+  filter(grepl("erm",Name.1), treatment != "WCS") %>%
+  select(Name, Name.1, Value, plot, treatment, sample_number) 
+
+ermsd <- erm %>%
+  group_by(sample_number, Name.1, treatment) %>%
+  summarize(mean_size = mean(Value, na.rm = TRUE), Sd=sqrt(var(Value))) 
+
+ermdata <- merge(erm, ermsd)
+
+e <- ggplot(ermdata, aes(x = sample_number, y = mean_size, color = Name.1, group = Name.1)) +
+  geom_errorbar(aes(ymin = mean_size-Sd, ymax = mean_size+Sd), alpha = 0.15, position = pd) +
+  geom_line(size = 2, position = pd) +
+  geom_point(size = 2, position = pd) +
+  facet_grid(~treatment, labeller = labeller(treatment = trt.labs)) +
+  scale_y_reverse() + 
+  theme_minimal() +
+  scale_color_viridis_d() +
+  labs(color = "ARG", y = "Mean concentration", x = "Water sample \n -> time increasing since runoff achieved", title = "erm genes in water")
+ggsave(plot = e, filename =  "plots/ermwater.png", width = 8, height = 8, device = "png")  
+####
+#### Soil plots
+soil1 <- samples %>%
+  filter(sample_type == "soil", Value < 100, treatment != "WCS", sample_number == 1)
+
+soil2 <- samples %>%
+  filter(sample_type == "soil", Value < 100, treatment != "WCS", sample_number == 2)
+
+plotconc <- function(data, gene){
+  
+  gdata <- data %>%
+    filter(grepl(gene, Name.1)) %>%
+    select(Name, Name.1, Value, plot, treatment, sample_number, soil_type) %>%
+    mutate(time = ifelse(grepl("T00", Name), 1,
+                         ifelse(grepl("TB", Name), 0, 2)))
+  
+  gdatasd <- gdata %>%
+    group_by(soil_type, Name.1, treatment, time) %>%
+    summarize(mean_size = mean(Value, na.rm = TRUE), Sd=sqrt(var(Value))) 
+  
+  gmdata <- merge(gdata, gdatasd)
+  
+  plot <- ggplot(gmdata, aes(x = time, y = mean_size, color = Name.1, group = Name.1)) +
+    geom_errorbar(aes(ymin = mean_size-Sd, ymax = mean_size+Sd), alpha = 0.15, position = pd) +
+    geom_line(size = 2, position = pd) +
+    geom_point(size = 2, position = pd) +
+    facet_grid(soil_type~treatment, labeller = labeller(treatment = trt.labs)) +
+    scale_y_reverse() + 
+    theme_minimal() +
+    scale_color_viridis_d() 
+  return(plot)
+  
+}
+a <- plotconc(soil1, "erm") +
+  labs(color = "ARG", y = "Mean concentration", x = "Soil sample \n -> time increasing since manure application", title = "erm genes in soil")
+ggsave("plots/ermsoil.png", a, device = "png", width = 8, height = 8)
+
+b <- plotconc(soil1, "tet")  +
+  labs(color = "ARG", y = "Mean concentration", x = "Soil sample \n -> time increasing since manure application", title = "tet genes in soil")
+ggsave("plots/tetsoil.png", b, device = "png", width = 8, height = 8)
+
+c <- plotconc(soil1, "sul")  +
+  labs(color = "ARG", y = "Mean concentration", x = "Soil sample \n -> time increasing since manure application", title = "sul genes in soil")
+ggsave("plots/sulsoil.png", c, device = "png", width = 8, height = 8)
+
+a <- plotconc(soil2, "erm") +
+  labs(color = "ARG", y = "Mean concentration", x = "Soil sample \n -> time increasing since manure application", title = "erm genes in soil \n depth 2")
+ggsave("plots/ermsoil2.png", a, device = "png", width = 8, height = 8)
+
+b <- plotconc(soil2, "tet")  +
+  labs(color = "ARG", y = "Mean concentration", x = "Soil sample \n -> time increasing since manure application", title = "tet genes in soil \n depth 2")
+ggsave("plots/tetsoil2.png", b, device = "png", width = 8, height = 8)
+
+c <- plotconc(soil2, "sul")  +
+  labs(color = "ARG", y = "Mean concentration", x = "Soil sample \n -> time increasing since manure application", title = "sul genes in soil \n depth 2")
+ggsave("plots/sulsoil2.png", c, device = "png", width = 8, height = 8)
