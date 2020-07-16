@@ -103,7 +103,7 @@ temp = subset(f2, treatment == "WCM")
 f2$Name.1 <- factor(f2$Name.1, levels=temp$Name.1[order(-temp$MEAN)])
 limits2<-aes(ymin=MEAN2-SE2, ymax=MEAN2+SE2)
 p = ggplot(f2, aes_string(x="Name.1", y="MEAN2", color="Name.1"))
-p + geom_point() + geom_errorbar(width=0.25, limits2)+theme_classic()+ theme(text=element_text(size=15, family="Helvetica"),axis.text.x = element_text(angle = 90), legend.position="none") + facet_grid(sample_day~treatment)
+p + geom_point() + geom_errorbar(width=0.25, limits2)+theme_classic()+ theme(text=element_text(size = 15, family = "Helvetica"),axis.text.x = element_text(angle = 90), legend.position="none") + facet_grid(sample_day~treatment)
 
 
 
@@ -113,13 +113,13 @@ water <- subset(samples, sample_type == "soil")
 water <- subset(water, treatment == "WCM")
 water <- subset(water, Value < 100)
 water$Value_inv <- 1/water$Value
-f <- ddply(water, .(treatment, Name.1, sample_day), summarise, MEAN = mean(Value_inv), SE=sd(Value_inv)/sqrt(length(Value_inv)))
+f <- ddply(water, .(treatment, Name.1, sample_day), summarise, MEAN = mean(Value_inv), SE = sd(Value_inv)/sqrt(length(Value_inv)))
 temp <- subset(f, sample_day == "TB")
 f$sample_day = factor(f$sample_day, levels=c("TB","T00","T02"))
 f$Name.1 <- factor(f$Name.1, levels=f$Name.1[order(-f$MEAN)])
 limits<-aes(ymin=MEAN-SE, ymax=MEAN+SE)
 p = ggplot(f, aes_string(x="Name.1", y="MEAN", color="Name.1"))
-p + geom_point() + geom_errorbar(width=0.25, limits)+ theme(text=element_text(size=20, family="Helvetica"),axis.text.x = element_text(angle = 90), legend.position="none") + facet_grid(sample_day~treatment)
+p + geom_point() + geom_errorbar(width=0.25, limits)+ theme(text=element_text(size=20, family = "Helvetica"),axis.text.x = element_text(angle = 90), legend.position="none") + facet_grid(sample_day~treatment)
 
 
 samples <- subset(merged, sample_type != "standard") #all samples
@@ -163,6 +163,7 @@ for(k in 1:length(smple_v)) {
 # New facet label names for treatment variable
 trt.labs <- c("WCM \n (manured crop)", "WCSM \n (manured strip)")
 names(trt.labs) <- c("WCM", "WCSM")
+
 tet <- water %>%
   filter(grepl("tet",Name.1), treatment != "WCS") %>%
   select(Name, Name.1, Value, plot, treatment, sample_number) 
