@@ -1,0 +1,290 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(ggpubr)
+```
+
+
+```{r}
+# Biomark chip data
+W1_1_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W1.1 Raw Data.xlsx", skip = 11)
+colnames(W1_1_Raw_Data)
+W1_2_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W1.2 Raw Data.xlsx", skip = 11)
+W2_1_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W2.1 Raw Data.xlsx", skip = 11)
+W3_1_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W3.1 Raw Data.xlsx", skip = 11)
+Raw_Data <- rbind(W1_1_Raw_Data, W1_2_Raw_Data, W2_1_Raw_Data, W3_1_Raw_Data) %>%
+  select("Sample_Name" = Name...2, "Sample_Type" = Type...3, "Assay" = Name...5, "Assay_Type" = Type...6, everything())
+```
+
+```{r}
+# Worle meta data
+Worle_biomark_meta <- read.csv("~/Desktop/biomark-private/meta/Worle_biomark_meta.csv")
+Worle_biomark_meta <- Worle_biomark_meta %>%
+  select("Sample_Name" = Name, everything())
+```
+
+```{r}
+# compare names 
+bmk <- as.character(unique(Worle_biomark_meta$Sample_Name))
+smp <- unique(Raw_Data$Sample_Name)
+intersect(bmk, smp)
+# in bmk but not smp
+setdiff(bmk, smp) 
+# in smp but not bmk
+setdiff(smp, bmk) 
+```
+```{r}
+# fix names
+# remove _STD and rename intl to intI
+Data <- Raw_Data %>%
+  mutate_all(~gsub("_STD", "", .)) %>% 
+  mutate_all(~gsub("intl1F165_clinical", "intI1F165_clinical", .)) 
+bmk <- as.character(unique(Worle_biomark_meta$Sample_Name))
+smp <- unique(Data$Sample_Name)
+
+# in bmk but not smp
+setdiff(bmk, smp) 
+# in smp but not bmk
+setdiff(smp, bmk) 
+```
+```{r}
+# merge
+df <- left_join(Data, Worle_biomark_meta)
+class(df)
+rm(Raw_Data, W1_1_Raw_Data, W1_2_Raw_Data, W2_1_Raw_Data, W3_1_Raw_Data, Worle_biomark_meta, Data, bmk, smp)
+
+# reorder sample_day column
+df$sample_day <- factor(df$sample_day, levels=c("TB", "T00", "T02", "T14"))
+```
+
+```{r}
+# subset biomark chip to interesting things
+soil <- df %>%
+  filter(sample_type %in% "soil")
+water <- df %>%
+  filter(sample_type %in% "water") 
+manure <- df %>%
+  filter(sample_type %in% "manure")
+control <- df %>%
+  filter(sample_type %in% "control")
+standard <- df %>%
+  filter(sample_type %in% "standard")
+```
+We need to calculate count using this function
+`count = SUM(B2)*(1/(10^9))*(1/660)*((6.023*10^23)/1)*(1/C2)*(D2)`
+
+B2 = concentration (decimal)
+C2 = amplicon length (varies, see cybox biomark for each assay)
+D2 = sample volume in ul (always .0067 for biomark?)
+```{r}
+# File of amplicon lengths (phil's biomark folder on Box)
+PC_Standards <- read_excel("~/Downloads/PC_Standards.xlsx")
+colnames(PC_Standards)
+# rename some columns
+PC_Standards <- PC_Standards %>%
+  select("gene" = `Sequence Name`, "amp_len" = `Total size`)
+
+head(PC_Standards)
+# 16s Assay names need fixed from Phil's to match biomark
+PC_Standards_no_NA <- PC_Standards %>% 
+  separate(gene, c("Assay"), sep = -2, remove = F) %>% select(gene, Assay, amp_len) %>%
+  mutate_all(~gsub("16S_Eub_338", "16S_Eub_338_518", .)) %>%
+  drop_na()
+
+head(PC_Standards_no_NA)
+tail(PC_Standards_no_NA)
+rm(PC_Standards)
+```
+```{r}
+options(scipen = 999)
+
+# plot standard curve from biomark standards using expected copy numbers based on amplicon length for each Assay
+plot_standard_curve_counts <- function(standards, gene){
+  std <- standards %>%
+  filter(Value < 990, grepl(gene, Assay), grepl(gene, Sample_Name)) %>%
+  left_join(PC_Standards_no_NA) %>%
+  select(Assay, rConc, Value, amp_len) %>%
+  mutate(counts = as.numeric(rConc) * (1/(10^9)) * (1/660) * ((6.023*10^23)/1) * (1/as.numeric(amp_len)) * (.0067)) %>%
+  ggplot(aes(x=log10(counts+1), y=as.numeric(Value))) + 
+    geom_point()+geom_smooth(method='lm') + 
+    labs(x="Count (log10)", y = "Ct") +
+    ggtitle(gene)
+ 
+  return(std)
+
+}
+sixS <- plot_standard_curve_counts(standard, "16S")
+tetG_F <- plot_standard_curve_counts(standard, "tetG_F")
+tetL <- plot_standard_curve_counts(standard, "tetL")
+tetM <- plot_standard_curve_counts(standard, "tetM")
+sixS
+tetG_F
+tetL
+tetM
+```
+```{r}
+# Functionto make count data frame for a gene
+stdgenecnt <- function(std){
+
+  Counts <- std %>%
+    group_by(rConc) %>%
+    summarise_at(vars(counts), funs(mean(., na.rm=TRUE))) %>%
+    mutate(Assay = unique(std$Assay))
+  
+  return(Counts)
+}
+Counts16s <- stdgenecnt(sixS$data)
+CountstetG_F <- stdgenecnt(tetG_F$data)
+Counts16s
+CountstetG_F
+```
+
+```{r}
+lm.r <- lm(data = sixS$data, formula = Value ~ log10(counts+1))
+summary(lm.r)$r.squared
+
+coef <- coef(lm.r)[2]
+eff <- 100*((10^(-1/coef))-1)
+(eff)
+```
+16s looks good
+
+```{r}
+lm.r <- lm(data = tetG_F$data, formula = Value ~ log10(counts+1))
+summary(lm.r)$r.squared
+
+coef <- coef(lm.r)[2]
+eff <- 100*((10^(-1/coef))-1)
+(eff)
+```
+```{r}
+lm.r <- lm(data = tetL$data, formula = Value ~ log10(counts+1))
+summary(lm.r)$r.squared
+
+coef <- coef(lm.r)[2]
+eff <- 100*((10^(-1/coef))-1)
+(eff)
+
+tetL$data
+tetL
+```
+```{r}
+lm.r <- lm(data = tetM$data, formula = Value ~ log10(counts+1))
+summary(lm.r)$r.squared
+
+coef <- coef(lm.r)[2]
+eff <- 100*((10^(-1/coef))-1)
+(eff)
+tetM$data
+
+qualityfiltered <- tetM$data %>%
+  filter(counts > 25, Value > 4)
+
+lmrf <- lm(qualityfiltered, formula = Value ~ log10(counts+1))
+summary(lmrf)$r.squared
+
+coef <- coef(lmrf)[2]
+eff <- 100*((10^(-1/coef))-1)
+(eff)
+
+```
+
+```{r}
+class(soil$Value)
+soil$Value <- as.numeric(soil$Value)
+
+meanCT <- function(sample_data, gene){
+  soil16s <- sample_data %>%
+  filter(grepl(gene, Assay), Value < 28) %>%
+  select(Sample_Name, Assay, Value, treatment, sample_day, sample_number, soil_type) %>%
+  group_by(Sample_Name) %>%
+  dplyr::mutate(mean = mean(Value)) #%>% # if you load `plyr` after dplyr it will not work correctly
+  #select(-Value) #%>%
+  #unique()
+  return(soil16s)
+}
+mean16sCT <- meanCT(soil, "16S")
+meantetG_FCT <- meanCT(soil, "tetG_F")
+
+```
+plot 16s counts for depth 1
+```{r}
+inverse.lm <- lm(data = sixS$data, formula = log10(counts+1) ~ as.numeric(Value))
+
+val2 <- mean16sCT$mean
+val4 <- mean16sCT$Value
+mean16sCT$temp <- 10 ^ predict(inverse.lm, data.frame(Value = val2), interval = "predict")[,1]
+
+mean16sCT$temptemp <- 10 ^ predict(inverse.lm, data.frame(Value = val4), interval = "predict")[,1]
+d1 <- mean16sCT %>%
+  filter(sample_number == 1, !sample_day %in% "T14") # drop random T14?
+
+my_comparisons <- list( c("WCS", "WCSM"), c("WCS", "WCM"), c("WCM", "WCSM"))
+ggboxplot(d1, x = "treatment", y = "temp") +
+  facet_grid(~ sample_day) +
+  stat_compare_means(comparisons = my_comparisons) +
+  scale_y_continuous() +
+  labs(x = "Manure Treatment", y = "Log 10 16s gene copies") + stat_compare_means(label.y = 3.5)
+ggboxplot(d1, x = "treatment", y = "temp", color = "treatment", add = "jitter", shape = "treatment") +
+  facet_grid(~ sample_day) +
+  stat_compare_means(comparisons = my_comparisons) +
+  scale_y_continuous() +
+  labs(x = "Depth 1 soil samples", y = "Log 10 16s gene copies") + stat_compare_means(label.y = 20) +
+  scale_color_viridis_d() 
+ggsave(filename = "../plots/16scountsd1worle.png", plot = last_plot(), device = "png")
+```
+
+plot tetX counts for depth 1
+```{r}
+inverse.lm <- lm(data = tetG_F$data, formula = log10(counts+1) ~ as.numeric(Value))
+# was using mean, but it seems like this is the better way, each CT to a count
+val2 <- meantetG_FCT$Value
+meantetG_FCT$temp <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
+
+d1 <- meantetG_FCT %>%
+  filter(sample_number == 1, !sample_day %in% "T14") 
+my_comparisons <- list( c("WCS", "WCSM"), c("WCS", "WCM"), c("WCM", "WCSM"))
+ggboxplot(d1, x = "treatment", y = "temp", color = "treatment", add = "jitter", shape = "treatment") +
+  facet_grid(~ sample_day) +
+  stat_compare_means(comparisons = my_comparisons) +
+  scale_y_continuous() +
+  labs(x = "Depth 1 soil samples", y = "Log 10 tetG_F gene copies") + stat_compare_means(label.y = 20) +
+  scale_color_viridis_d() 
+  
+```
+
+```{r}
+water$Value %<>% as.numeric
+
+meanwater16s <- meanCT(water, "16S") 
+inverse.lm <- lm(data = sixS$data, formula = log10(counts+1) ~ as.numeric(Value))
+val2 <- meanwater16s$Value
+meanwater16s$temp <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
+
+meanwatertetG_F <- meanCT(water, "tetG_F")
+inverse.lm <- lm(data = tetG_F$data, formula = log10(counts+1) ~ as.numeric(Value))
+val2 <- meanwatertetG_F$Value
+meanwatertetG_F$temp <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
+
+meanwatertetL <- meanCT(water, "tetL") %>%
+  filter(Value < 20)
+inverse.lm <- lm(data = qualityfiltered, formula = log10(counts+1) ~ as.numeric(Value))
+val2 <- meanwatertetL$Value
+meanwatertetL$temp <- 10 ^ predict(inverse.lm, data.frame(Value = val2), interval = "predict")[,1]
+
+ggboxplot(meanwater16s, x = "sample_number", y = "temp", color = "treatment") +
+  labs(x = "Water Sample", y = "Log 10 gene 16s copies") 
+ggsave("../plots/16swater.png", plot = last_plot(), device = "png")
+ggboxplot(meanwatertetG_F, x = "sample_number", y = "temp", color = "treatment") +
+  labs(x = "Water Sample", y = "Log 10 gene tetG_F copies") 
+
+ggboxplot(meanwatertetL, x = "sample_number", y = "temp", color = "treatment", add = "jitter", shape = "treatment") +
+  labs(x = "Water Sample", y = "Log 10 gene tetL copies") 
+
+```
+
