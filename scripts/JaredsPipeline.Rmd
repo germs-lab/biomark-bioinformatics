@@ -12,54 +12,56 @@ library(ggpubr)
 
 ```{r}
 # Biomark chip data
-W1_1_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W1.1 Raw Data.xlsx", skip = 11)
-colnames(W1_1_Raw_Data)
-W1_2_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W1.2 Raw Data.xlsx", skip = 11)
-W2_1_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W2.1 Raw Data.xlsx", skip = 11)
-W3_1_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W3.1 Raw Data.xlsx", skip = 11)
-Raw_Data <- rbind(W1_1_Raw_Data, W1_2_Raw_Data, W2_1_Raw_Data, W3_1_Raw_Data) %>%
-  select("Sample_Name" = Name...2, "Sample_Type" = Type...3, "Assay" = Name...5, "Assay_Type" = Type...6, everything())
+# W1_1_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W1.1 Raw Data.xlsx", skip = 11)
+# colnames(W1_1_Raw_Data)
+# W1_2_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W1.2 Raw Data.xlsx", skip = 11)
+# W2_1_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W2.1 Raw Data.xlsx", skip = 11)
+# W3_1_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W3.1 Raw Data.xlsx", skip = 11)
+# Raw_Data <- rbind(W1_1_Raw_Data, W1_2_Raw_Data, W2_1_Raw_Data, W3_1_Raw_Data) %>%
+#   select("Sample_Name" = Name...2, "Sample_Type" = Type...3, "Assay" = Name...5, "Assay_Type" = Type...6, everything())
 ```
 
 ```{r}
 # Worle meta data
-Worle_biomark_meta <- read.csv("~/Desktop/biomark-private/meta/Worle_biomark_meta.csv")
-Worle_biomark_meta <- Worle_biomark_meta %>%
-  select("Sample_Name" = Name, everything())
+# Worle_biomark_meta <- read.csv("~/Desktop/biomark-private/meta/Worle_biomark_meta.csv")
+# Worle_biomark_meta <- Worle_biomark_meta %>%
+#   select("Sample_Name" = Name, everything())
 ```
 
 ```{r}
-# compare names 
-bmk <- as.character(unique(Worle_biomark_meta$Sample_Name))
-smp <- unique(Raw_Data$Sample_Name)
-intersect(bmk, smp)
-# in bmk but not smp
-setdiff(bmk, smp) 
-# in smp but not bmk
-setdiff(smp, bmk) 
+# # compare names 
+# bmk <- as.character(unique(Worle_biomark_meta$Sample_Name))
+# smp <- unique(Raw_Data$Sample_Name)
+# intersect(bmk, smp)
+# # in bmk but not smp
+# setdiff(bmk, smp) 
+# # in smp but not bmk
+# setdiff(smp, bmk) 
 ```
 ```{r}
-# fix names
-# remove _STD and rename intl to intI
-Data <- Raw_Data %>%
-  mutate_all(~gsub("_STD", "", .)) %>% 
-  mutate_all(~gsub("intl1F165_clinical", "intI1F165_clinical", .)) 
-bmk <- as.character(unique(Worle_biomark_meta$Sample_Name))
-smp <- unique(Data$Sample_Name)
-
-# in bmk but not smp
-setdiff(bmk, smp) 
-# in smp but not bmk
-setdiff(smp, bmk) 
+# # fix names
+# # remove _STD and rename intl to intI
+# Data <- Raw_Data %>%
+#   mutate_all(~gsub("_STD", "", .)) %>% 
+#   mutate_all(~gsub("intl1F165_clinical", "intI1F165_clinical", .)) 
+# bmk <- as.character(unique(Worle_biomark_meta$Sample_Name))
+# smp <- unique(Data$Sample_Name)
+# 
+# # in bmk but not smp
+# setdiff(bmk, smp) 
+# # in smp but not bmk
+# setdiff(smp, bmk) 
 ```
 ```{r}
 # merge
-df <- left_join(Data, Worle_biomark_meta)
-class(df)
-rm(Raw_Data, W1_1_Raw_Data, W1_2_Raw_Data, W2_1_Raw_Data, W3_1_Raw_Data, Worle_biomark_meta, Data, bmk, smp)
-
-# reorder sample_day column
-df$sample_day <- factor(df$sample_day, levels=c("TB", "T00", "T02", "T14"))
+# df <- left_join(Data, Worle_biomark_meta)
+# class(df)
+# rm(Raw_Data, W1_1_Raw_Data, W1_2_Raw_Data, W2_1_Raw_Data, W3_1_Raw_Data, Worle_biomark_meta, Data, bmk, smp)
+# 
+# # reorder sample_day column
+# df$sample_day <- factor(df$sample_day, levels=c("TB", "T00", "T02", "T14"))
+# saveRDS(df, file = "../data/metawithbiomark.RDS")
+df <- readRDS("../data/metawithbiomark.RDS")
 ```
 
 ```{r}
@@ -82,23 +84,25 @@ B2 = concentration (decimal)
 C2 = amplicon length (varies, see cybox biomark for each assay)
 D2 = sample volume in ul (always .0067 for biomark?)
 ```{r}
-# File of amplicon lengths (phil's biomark folder on Box)
-PC_Standards <- read_excel("~/Downloads/PC_Standards.xlsx")
-colnames(PC_Standards)
-# rename some columns
-PC_Standards <- PC_Standards %>%
-  select("gene" = `Sequence Name`, "amp_len" = `Total size`)
-
-head(PC_Standards)
-# 16s Assay names need fixed from Phil's to match biomark
-PC_Standards_no_NA <- PC_Standards %>% 
-  separate(gene, c("Assay"), sep = -2, remove = F) %>% select(gene, Assay, amp_len) %>%
-  mutate_all(~gsub("16S_Eub_338", "16S_Eub_338_518", .)) %>%
-  drop_na()
-
-head(PC_Standards_no_NA)
-tail(PC_Standards_no_NA)
-rm(PC_Standards)
+# # File of amplicon lengths (phil's biomark folder on Box)
+# PC_Standards <- read_excel("~/Downloads/PC_Standards.xlsx")
+# colnames(PC_Standards)
+# # rename some columns
+# PC_Standards <- PC_Standards %>%
+#   select("gene" = `Sequence Name`, "amp_len" = `Total size`)
+# 
+# head(PC_Standards)
+# # 16s Assay names need fixed from Phil's to match biomark
+# PC_Standards_no_NA <- PC_Standards %>% 
+#   separate(gene, c("Assay"), sep = -2, remove = F) %>% select(gene, Assay, amp_len) %>%
+#   mutate_all(~gsub("16S_Eub_338", "16S_Eub_338_518", .)) %>%
+#   drop_na()
+# 
+# head(PC_Standards_no_NA)
+# tail(PC_Standards_no_NA)
+# rm(PC_Standards)
+# saveRDS(PC_Standards_no_NA, "../data/ampliconlengths.RDS")
+PC_Standards_no_NA <- readRDS("../data/ampliconlengths.RDS")
 ```
 ```{r}
 options(scipen = 999)
