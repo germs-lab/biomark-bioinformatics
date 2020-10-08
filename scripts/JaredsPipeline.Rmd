@@ -11,6 +11,7 @@ library(ggpubr)
 
 
 ```{r}
+# Us this if you need to load new data, we are using the output of this saved as an RDS below
 # Biomark chip data
 # W1_1_Raw_Data <- read_excel("~/Desktop/biomark-private/data/W1.1 Raw Data.xlsx", skip = 11)
 # colnames(W1_1_Raw_Data)
@@ -61,7 +62,7 @@ library(ggpubr)
 # # reorder sample_day column
 # df$sample_day <- factor(df$sample_day, levels=c("TB", "T00", "T02", "T14"))
 # saveRDS(df, file = "../data/metawithbiomark.RDS")
-df <- readRDS("../data/metawithbiomark.RDS")
+df <- readRDS("../data/metawithbiomark.RDS") 
 ```
 
 ```{r}
@@ -77,12 +78,99 @@ control <- df %>%
 standard <- df %>%
   filter(sample_type %in% "standard")
 ```
-We need to calculate count using this function
+# Look at manure
+What ARGs did we detect in manure? 
+What ARGs did we detect in non-manured soil plots? Should we ignore those for this analysis? 
+```{r}
+m <- manure %>%
+  filter(Value < 28, Call == "Pass") %>%
+  group_by(sample_type, Assay) %>%
+  dplyr::mutate(mean = mean(as.numeric(Value)))
+
+manureplot <- m %>%
+  ggplot(aes(x = reorder(Assay, -mean), y = mean, fill = Assay)) +
+    geom_bar(stat = "identity", position = position_dodge()) +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_viridis_d() +
+    coord_flip() +
+    labs(y = "mean Ct value", x = "Assay", title = "Cycle times for assays in poultry manure \n sorted by most abundant assay on top")
+manureplot
+
+order <- m %>%
+  group_by(sample_type, Assay) %>%
+  arrange(-mean) %>%
+  distinct(Assay) %>%
+  pull(Assay)
+
+plot <- manure %>%
+  filter(Value < 28, Call == "Pass") %>%
+  group_by(Sample_Name, Assay) %>%
+  dplyr::mutate(mean = mean(as.numeric(Value))) %>%
+  ggboxplot(x = "Assay", y = "mean", order = order, fill = "Assay") +
+    scale_fill_viridis_d() +
+    coord_flip() +
+    theme(legend.position = "none") +
+    labs(y = "mean Ct value", x = "Gene", title = "Cycle times for genes of interest in poultry manure \n sorted by most abundant gene on top")
+plot
+ggsave(filename = "../plots/pultrymanureCT.png", plot = last_plot(), device = "png")
+
+```
+Non-manured soils, baseline
+```{r}
+m <- soil %>%
+  filter(Value < 28, Call == "Pass", sample_day == "TB") %>%
+  group_by(sample_type, Assay) %>%
+  dplyr::mutate(mean = mean(as.numeric(Value)))
+
+soilplot <- m %>%
+  ggplot(aes(x = reorder(Assay, -mean), y = mean, fill = Assay)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_fill_viridis_d() +
+  coord_flip() +
+  labs(y = "mean Ct value", x = "Assay", title = "Cycle times for assays in non-manured soils \n sorted by most abundant assay on top")
+soilplot
+```
+Non-manured soils, no manure treatment
+```{r}
+m <- soil %>%
+  filter(Value < 28, Call == "Pass", treatment == "WCS") %>%
+  group_by(sample_type, Assay) %>%
+  dplyr::mutate(mean = mean(as.numeric(Value)))
+
+soilplot2 <- m %>%
+  ggplot(aes(x = reorder(Assay, -mean), y = mean, fill = Assay)) +
+    geom_bar(stat = "identity", position = position_dodge()) +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_viridis_d() +
+    coord_flip() +
+    labs(y = "mean Ct value", x = "Assay", title = "Cycle times for assays in non-manured soils \n sorted by most abundant assay on top")
+soilplot2
+```
+```{r}
+print("These assays are in manure but not non-manured soil")
+manargs <- setdiff(manureplot$data$Assay, soilplot$data$Assay)
+manargs
+```
+Based on above, we should choose some interesting genes that are in manure but not soil.
+
+16s, tetH, tetM, tetT, tetW, tetX, erm(C)
+```{r}
+
+```
+
+We need to calculate count using this function:
 `count = SUM(B2)*(1/(10^9))*(1/660)*((6.023*10^23)/1)*(1/C2)*(D2)`
 
 B2 = concentration (decimal)
 C2 = amplicon length (varies, see cybox biomark for each assay)
-D2 = sample volume in ul (always .0067 for biomark?)
+D2 = sample volume in ul (always .0067 for biomark)
+
+For each of the genes of interest
+
 ```{r}
 # # File of amplicon lengths (phil's biomark folder on Box)
 # PC_Standards <- read_excel("~/Downloads/PC_Standards.xlsx")
@@ -109,186 +197,361 @@ options(scipen = 999)
 
 # plot standard curve from biomark standards using expected copy numbers based on amplicon length for each Assay
 plot_standard_curve_counts <- function(standards, gene){
+  
   std <- standards %>%
-  filter(Value < 990, grepl(gene, Assay), grepl(gene, Sample_Name)) %>%
-  left_join(PC_Standards_no_NA) %>%
-  select(Assay, rConc, Value, amp_len) %>%
-  mutate(counts = as.numeric(rConc) * (1/(10^9)) * (1/660) * ((6.023*10^23)/1) * (1/as.numeric(amp_len)) * (.0067)) %>%
-  ggplot(aes(x=log10(counts+1), y=as.numeric(Value))) + 
-    geom_point()+geom_smooth(method='lm') + 
-    labs(x="Count (log10)", y = "Ct") +
-    ggtitle(gene)
+    filter(Value < 990, grepl(gene, Assay), grepl(gene, Sample_Name)) %>%
+    left_join(PC_Standards_no_NA) %>%
+    select(Assay, rConc, Value, amp_len) %>%
+    mutate(counts = as.numeric(rConc) * (1/(10^9)) * (1/660) * ((6.023*10^23)/1) * (1/as.numeric(amp_len)) * (.0067)) %>%
+    ggplot(aes(x = log10(counts + 1), y = as.numeric(Value))) + 
+      geom_point() + geom_smooth(method = 'lm') + 
+      labs(x = "Count (log10)", y = "Ct") +
+      ggtitle(gene)
  
   return(std)
-
 }
-sixS <- plot_standard_curve_counts(standard, "16S")
-tetG_F <- plot_standard_curve_counts(standard, "tetG_F")
-tetL <- plot_standard_curve_counts(standard, "tetL")
-tetM <- plot_standard_curve_counts(standard, "tetM")
-sixS
-tetG_F
-tetL
-tetM
 ```
+Plot standard curves for genes of interest, we will use the plot data later on in the analysis
 ```{r}
-# Functionto make count data frame for a gene
-stdgenecnt <- function(std){
-
-  Counts <- std %>%
+sixS <- plot_standard_curve_counts(standard, "16S")
+tetH <- plot_standard_curve_counts(standard, "tetH")
+tetM <- plot_standard_curve_counts(standard, "tetM")
+tetT <- plot_standard_curve_counts(standard, "tetT")
+tetW <- plot_standard_curve_counts(standard, "tetW")
+tetX <- plot_standard_curve_counts(standard, "tetX")
+tetbP <- plot_standard_curve_counts(standard, "tetbP")
+strB <- plot_standard_curve_counts(standard, "strB")
+#ermC <- plot_standard_curve_counts(standard, "erm(C)")
+sixS 
+tetH
+tetM
+tetT
+tetW 
+tetX 
+strB
+#ermC 
+# erm(C) does not look good, leave it out. Also need to change filter function as () don't work with grepl. 
+# test <- standard %>%
+#   filter(Assay %in% "erm(C)", Sample_Name %in% "erm(C)") %>%
+#   left_join(PC_Standards_no_NA) %>%
+#   select(Assay, rConc, Value, amp_len) %>%
+#   mutate(counts = as.numeric(rConc) * (1/(10^9)) * (1/660) * ((6.023*10^23)/1) * (1/as.numeric(amp_len)) * (.0067)) %>%
+#   ggplot(aes(x = log10(counts + 1), y = as.numeric(Value))) + 
+#     geom_point() + geom_smooth(method = 'lm') + 
+#     labs(x = "Count (log10)", y = "Ct") +
+#     ggtitle("erm(C)")
+# test
+```                                                   
+```{r}                                                
+# Function to make count data frame for a gene         
+stdgenecnt <- function(std){                          
+                                                      
+  Counts <- std %>%                                   
     group_by(rConc) %>%
-    summarise_at(vars(counts), funs(mean(., na.rm=TRUE))) %>%
+    summarise_at(vars(counts), funs(mean(., na.rm = TRUE))) %>%
     mutate(Assay = unique(std$Assay))
   
   return(Counts)
 }
 Counts16s <- stdgenecnt(sixS$data)
-CountstetG_F <- stdgenecnt(tetG_F$data)
-Counts16s
-CountstetG_F
 ```
 
+Check efficiency and fit of each standard
 ```{r}
-lm.r <- lm(data = sixS$data, formula = Value ~ log10(counts+1))
+dt <- sixS$data
+lm.r <- lm(data = dt, formula = Value ~ log10(counts+1))
 summary(lm.r)$r.squared
 
 coef <- coef(lm.r)[2]
-eff <- 100*((10^(-1/coef))-1)
+eff <- 100*((10^(-1/coef)) - 1)
 (eff)
 ```
 16s looks good
 
 ```{r}
-lm.r <- lm(data = tetG_F$data, formula = Value ~ log10(counts+1))
-summary(lm.r)$r.squared
-
-coef <- coef(lm.r)[2]
-eff <- 100*((10^(-1/coef))-1)
-(eff)
-```
-```{r}
-lm.r <- lm(data = tetL$data, formula = Value ~ log10(counts+1))
-summary(lm.r)$r.squared
-
-coef <- coef(lm.r)[2]
-eff <- 100*((10^(-1/coef))-1)
-(eff)
-
-tetL$data
-tetL
-```
-```{r}
-lm.r <- lm(data = tetM$data, formula = Value ~ log10(counts+1))
-summary(lm.r)$r.squared
-
-coef <- coef(lm.r)[2]
-eff <- 100*((10^(-1/coef))-1)
-(eff)
-tetM$data
-
-qualityfiltered <- tetM$data %>%
-  filter(counts > 25, Value > 4)
-
-lmrf <- lm(qualityfiltered, formula = Value ~ log10(counts+1))
-summary(lmrf)$r.squared
-
-coef <- coef(lmrf)[2]
-eff <- 100*((10^(-1/coef))-1)
-(eff)
-
-```
-
-```{r}
-class(soil$Value)
-soil$Value <- as.numeric(soil$Value)
-
+#Function to calculate mean Ct value if you wish to use it
 meanCT <- function(sample_data, gene){
   soil16s <- sample_data %>%
   filter(grepl(gene, Assay), Value < 28) %>%
-  select(Sample_Name, Assay, Value, treatment, sample_day, sample_number, soil_type) %>%
+  select(ID, Sample_Name, Assay, Value, treatment, sample_day, sample_number, soil_type, plot) %>%
   group_by(Sample_Name) %>%
   dplyr::mutate(mean = mean(Value)) #%>% # if you load `plyr` after dplyr it will not work correctly
   #select(-Value) #%>%
   #unique()
   return(soil16s)
 }
-mean16sCT <- meanCT(soil, "16S")
-meantetG_FCT <- meanCT(soil, "tetG_F")
+```
 
+
+# No ARGs in manure amplified in soil from list above. 
+# Plot ARG Ct in soils 
+```{r}
+# search for tet genes less than 28, only return tetG_F, which didn't amplify in manure and tetL which also amplified in soil. strB not in soil either. Basically nothing detected in manure as ARG is detected in soil. Yet 16s is. 
+soil16s <- soil %>%
+  filter(!grepl("16S", Assay), Value < 28, Call == "Pass") %>%
+  select(Sample_Name, Assay, Value, treatment, sample_day, sample_number, soil_type) %>%
+  group_by(Sample_Name) %>%
+  dplyr::mutate(mean = mean(Value)) #%>% # if you load `plyr` after dplyr it will not work correctly
+  #select(-Value) #%>%
+
+manargs
+a <- soil16s %>%
+  mutate(colssss = ifelse(Assay %in% manargs, "blue", "red")) %>%
+  filter(colssss == "blue")
+
+a %>%
+  ggplot(aes(x = reorder(Assay, -mean), y = Value, fill = sample_number)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  scale_fill_viridis_d() +
+  labs(y = "mean Ct value", x = "Assay", title = "Cycle times for assays in soils") +
+  facet_grid(treatment ~ sample_day) +
+  coord_flip()
+
+```
+The story here is that we basically are not able to detect many manure associated ARGs (those only in manure but not in un-manured soils), we must move to looking into the water. 
+
+# Soil
+```{r}
+class(soil$Value)
+soil$Value <- as.numeric(soil$Value)
+
+msoil16S <- meanCT(soil, "16S")
 ```
 plot 16s counts for depth 1
 ```{r}
-inverse.lm <- lm(data = sixS$data, formula = log10(counts+1) ~ as.numeric(Value))
+dt <- sixS$data
+dt2 <- msoil16S
 
-val2 <- mean16sCT$mean
-val4 <- mean16sCT$Value
-mean16sCT$temp <- 10 ^ predict(inverse.lm, data.frame(Value = val2), interval = "predict")[,1]
+inverse.lm <- lm(data = dt, formula = log10(counts+1) ~ as.numeric(Value))
 
-mean16sCT$temptemp <- 10 ^ predict(inverse.lm, data.frame(Value = val4), interval = "predict")[,1]
-d1 <- mean16sCT %>%
-  filter(sample_number == 1, !sample_day %in% "T14") # drop random T14?
+val4 <- dt2$Value
 
+dt2$sixS <- 10 ^ predict(inverse.lm, data.frame(Value = val4), interval = "predict")[,1]
+
+d1 <- dt2 %>%
+  filter(!sample_day %in% "T14") # drop random T14?
+
+glimpse(d1)
 my_comparisons <- list( c("WCS", "WCSM"), c("WCS", "WCM"), c("WCM", "WCSM"))
-ggboxplot(d1, x = "treatment", y = "temp") +
-  facet_grid(~ sample_day) +
+
+ggboxplot(d1, x = "treatment", y = "sixS", fill = "treatment") +
+  facet_grid(sample_number ~ sample_day) +
   stat_compare_means(comparisons = my_comparisons) +
-  scale_y_continuous() +
-  labs(x = "Manure Treatment", y = "Log 10 16s gene copies") + stat_compare_means(label.y = 3.5)
-ggboxplot(d1, x = "treatment", y = "temp", color = "treatment", add = "jitter", shape = "treatment") +
-  facet_grid(~ sample_day) +
-  stat_compare_means(comparisons = my_comparisons) +
-  scale_y_continuous() +
-  labs(x = "Depth 1 soil samples", y = "Log 10 16s gene copies") + stat_compare_means(label.y = 20) +
-  scale_color_viridis_d() 
-ggsave(filename = "../plots/16scountsd1worle.png", plot = last_plot(), device = "png")
+  scale_y_continuous(trans = 'log10') +
+  labs(x = "Depth 1 soil samples", y = "Log 10 16s gene copies") + 
+  scale_fill_viridis_d() +
+  theme(legend.position = "none") 
+
+ggsave(filename = "../plots/16scountsd1worle.png", plot = last_plot(), device = "png", width = 8, height = 8)
 ```
 
-plot tetX counts for depth 1
-```{r}
-inverse.lm <- lm(data = tetG_F$data, formula = log10(counts+1) ~ as.numeric(Value))
-# was using mean, but it seems like this is the better way, each CT to a count
-val2 <- meantetG_FCT$Value
-meantetG_FCT$temp <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
 
-d1 <- meantetG_FCT %>%
-  filter(sample_number == 1, !sample_day %in% "T14") 
-my_comparisons <- list( c("WCS", "WCSM"), c("WCS", "WCM"), c("WCM", "WCSM"))
-ggboxplot(d1, x = "treatment", y = "temp", color = "treatment", add = "jitter", shape = "treatment") +
-  facet_grid(~ sample_day) +
-  stat_compare_means(comparisons = my_comparisons) +
-  scale_y_continuous() +
-  labs(x = "Depth 1 soil samples", y = "Log 10 tetG_F gene copies") + stat_compare_means(label.y = 20) +
-  scale_color_viridis_d() 
-  
+# Water
+
+```{r}
+m <- water %>%
+  filter(Value < 28, Call == "Pass") %>%
+  group_by(treatment, Assay, sample_number) %>%
+  dplyr::mutate(mean = mean(as.numeric(Value))) %>%
+  mutate(colssss = ifelse(Assay %in% manargs, "blue", "red")) %>%
+  filter(colssss == "blue")
+
+manureplot <- m %>%
+  ggplot(aes(x = Assay, y = mean, fill = Assay)) +
+    geom_bar(stat = "identity", position = position_dodge()) +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    scale_fill_viridis_d() +
+    coord_flip() +
+    labs(y = "mean Ct value", x = "Assay", title = "Cycle times for assays in water") +
+    facet_grid(treatment ~ sample_number)
+manureplot
+
+unique(manureplot$data$Assay)
+
+order <- water %>%
+  filter(Value < 28, Call == "Pass") %>%
+  group_by(Assay) %>%
+  dplyr::mutate(mean = mean(as.numeric(Value))) %>%
+  arrange(-mean) %>%
+  pull(Assay) %>%
+  unique()
+
+plot <- water %>%
+  filter(Value < 28, Call == "Pass", Assay %in% manargs, !treatment == "WCS" ) %>%
+  group_by(treatment, Assay) %>%
+  dplyr::mutate(mean = mean(as.numeric(Value))) %>%
+  ggboxplot(x = "Assay", y = "Value", fill = "treatment", order = order) +
+    scale_fill_viridis_d() +
+    coord_flip() +
+    labs(y = "mean Ct value", x = "Gene", title = "Cycle times for genes from poultry manure in runoff water ")
+plot
+ggsave(filename = "../plots/pultrymanurenwaterCT.png", plot = last_plot(), device = "png")
+```
+tet genes confer various forms of resistance to the antibiotic tetracycline. 
+tnp genes are involved in DNA integration and DNA recombination...potentialy involved in HGT
+lnuA Lincosamide nucleotidyltransferase
+erm(C) Erythromycin resistance protein
+
+
+After determining that we had limited detection in soil for ARGs, let's move onto the water and tet genes
+```{r}
+mwater16S <- meanCT(water, "16S")
+mwatertetH <- meanCT(water, "tetH")
+mwatertetM <- meanCT(water, "tetM")
+mwatertetT <- meanCT(water, "tetT")
+mwatertetW <- meanCT(water, "tetW")
+mwatertetX <- meanCT(water, "tetX")
+mwatertetbP <- meanCT(water, "tetbP")
 ```
 
+Water 16s
 ```{r}
-water$Value %<>% as.numeric
+water$Value <- as.numeric(water$Value)
 
-meanwater16s <- meanCT(water, "16S") 
 inverse.lm <- lm(data = sixS$data, formula = log10(counts+1) ~ as.numeric(Value))
-val2 <- meanwater16s$Value
-meanwater16s$temp <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
 
-meanwatertetG_F <- meanCT(water, "tetG_F")
-inverse.lm <- lm(data = tetG_F$data, formula = log10(counts+1) ~ as.numeric(Value))
-val2 <- meanwatertetG_F$Value
-meanwatertetG_F$temp <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
+val2 <- mwater16S$Value
 
-meanwatertetL <- meanCT(water, "tetL") %>%
-  filter(Value < 20)
-inverse.lm <- lm(data = qualityfiltered, formula = log10(counts+1) ~ as.numeric(Value))
-val2 <- meanwatertetL$Value
-meanwatertetL$temp <- 10 ^ predict(inverse.lm, data.frame(Value = val2), interval = "predict")[,1]
+mwater16S$sixS <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
 
-ggboxplot(meanwater16s, x = "sample_number", y = "temp", color = "treatment") +
-  labs(x = "Water Sample", y = "Log 10 gene 16s copies") 
+mwater16S 
+
+ggboxplot(mwater16S, x = "sample_number", y = "sixS", fill = "treatment", add = "dotplot") +
+  labs(x = "Water Sample", y = "Log 10 gene 16s copies") +
+  scale_y_continuous(trans = 'log10') +
+  scale_fill_viridis_d() 
+
 ggsave("../plots/16swater.png", plot = last_plot(), device = "png")
-ggboxplot(meanwatertetG_F, x = "sample_number", y = "temp", color = "treatment") +
-  labs(x = "Water Sample", y = "Log 10 gene tetG_F copies") 
+```
+tetT was detected in the most water samples, 33, compared to 188 for 16s
+```{r}
+tetT
+inverse.lm <- lm(data = tetT$data, formula = log10(counts+1) ~ as.numeric(Value))
 
-ggboxplot(meanwatertetL, x = "sample_number", y = "temp", color = "treatment", add = "jitter", shape = "treatment") +
-  labs(x = "Water Sample", y = "Log 10 gene tetL copies") 
+val2 <- mwatertetT$Value
 
+mwatertetT$tetT <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
+
+mwatertetT 
+
+ggboxplot(mwatertetT, x = "sample_number", y = "tetT", fill = "treatment", add = "dotplot") +
+  labs(x = "Water Sample", y = "Log 10 tetT gene copies") +
+  scale_y_continuous(trans = 'log10') +
+  scale_fill_viridis_d() 
+
+ggsave("../plots/tetTwater.png", plot = last_plot(), device = "png")
+```
+```{r}
+tetX
+inverse.lm <- lm(data = tetX$data, formula = log10(counts+1) ~ as.numeric(Value))
+
+val2 <- mwatertetX$Value
+
+mwatertetX$tetX <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
+
+mwatertetX 
+
+ggboxplot(mwatertetX, x = "sample_number", y = "tetX", fill = "treatment", add = "dotplot") +
+  labs(x = "Water Sample", y = "Log 10 tetX gene copies") +
+  scale_y_continuous(trans = 'log10') +
+  scale_fill_viridis_d() 
+
+ggsave("../plots/tetXwater.png", plot = last_plot(), device = "png")
+```
+```{r}
+tetW
+inverse.lm <- lm(data = tetW$data, formula = log10(counts+1) ~ as.numeric(Value))
+
+val2 <- mwatertetW$Value
+
+mwatertetW$tetW <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
+
+mwatertetW 
+
+ggboxplot(mwatertetW, x = "sample_number", y = "tetW", fill = "treatment", add = "dotplot") +
+  labs(x = "Water Sample", y = "Log 10 tetW gene copies") +
+  scale_y_continuous(trans = 'log10') +
+  scale_fill_viridis_d() 
+
+ggsave("../plots/tetWwater.png", plot = last_plot(), device = "png")
+```
+tetH
+```{r}
+tetH
+inverse.lm <- lm(data = tetH$data, formula = log10(counts+1) ~ as.numeric(Value))
+
+val2 <- mwatertetH$Value
+
+mwatertetH$tetH <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
+
+mwatertetH 
+
+ggboxplot(mwatertetH, x = "sample_number", y = "tetH", fill = "treatment", add = "dotplot") +
+  labs(x = "Water Sample", y = "Log 10 tetH gene copies") +
+  scale_y_continuous(trans = 'log10') +
+  scale_fill_viridis_d() 
+
+ggsave("../plots/tetHwater.png", plot = last_plot(), device = "png")
+```
+
+tetM
+```{r}
+tetM
+inverse.lm <- lm(data = tetM$data, formula = log10(counts+1) ~ as.numeric(Value))
+
+val2 <- mwatertetM$Value
+
+mwatertetM$tetM <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
+
+mwatertetM 
+
+ggboxplot(mwatertetM, x = "sample_number", y = "tetM", fill = "treatment", add = "dotplot") +
+  labs(x = "Water Sample", y = "Log 10 tetM gene copies") +
+  scale_y_continuous(trans = 'log10') +
+  scale_fill_viridis_d() 
+  
+
+ggsave("../plots/tetMwater.png", plot = last_plot(), device = "png")
+
+# divide by 16s, mean of counts by plot and time
+
+x <- mwatertetM %>%
+  dplyr::mutate(meantet = mean(as.numeric(tetM))) %>%
+  select(Sample_Name, sample_number, treatment, meantet) %>%
+  unique()
+
+y <- mwater16S %>%
+  dplyr::mutate(mean16s = mean(as.numeric(sixS))) %>%
+  select(Sample_Name, sample_number, treatment, mean16s) %>%
+  unique()
+
+test <- left_join(x,y, by = "Sample_Name") %>%
+  mutate(ncounttetM = meantet / mean16s)
+
+ggboxplot(test, x = "sample_number.x", y = "ncounttetM", fill = "treatment.x", add = "dotplot") +
+  labs(x = "Water Sample", y = "16s normalized tetM gene copies") +
+  scale_y_continuous(trans = 'log10') +
+  scale_fill_viridis_d() 
+```
+
+tetbP
+```{r}
+tetbP
+inverse.lm <- lm(data = tetbP$data, formula = log10(counts+1) ~ as.numeric(Value))
+
+val2 <- mwatertetbP$Value
+
+mwatertetbP$tetbP <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
+
+mwatertetbP 
+
+ggboxplot(mwatertetbP, x = "sample_number", y = "tetbP", fill = "treatment", add = "dotplot") +
+  labs(x = "Water Sample", y = "Log 10 tetbP gene copies") +
+  scale_y_continuous(trans = 'log10') +
+  scale_fill_viridis_d() 
+
+ggsave("../plots/tetbPwater.png", plot = last_plot(), device = "png")
 ```
 
