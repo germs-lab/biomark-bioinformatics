@@ -151,6 +151,18 @@ soilplot2 <- m %>%
 soilplot2
 ```
 ```{r}
+list <- unique(m$Assay)
+list
+
+for (i in 1:length(list)) {
+  count <- plot_standard_curve_counts(standard, "i")
+  print(list[i])
+}
+count.data <- count$data
+
+```
+
+```{r}
 print("These assays are in manure but not non-manured soil")
 manargs <- setdiff(manureplot$data$Assay, soilplot$data$Assay)
 manargs
@@ -158,8 +170,13 @@ manargs
 Based on above, we should choose some interesting genes that are in manure but not soil.
 
 16s, tetH, tetM, tetT, tetW, tetX, erm(C)
-```{r}
 
+What about soil associated ARGs? Those ARGs that are not from manure? 
+
+```{r}
+print("These assays are in soil but not manure")
+soilargs <- setdiff(soilplot$data$Assay, manureplot$data$Assay)
+soilargs
 ```
 
 We need to calculate count using this function:
@@ -172,24 +189,24 @@ D2 = sample volume in ul (always .0067 for biomark)
 For each of the genes of interest
 
 ```{r}
-# # File of amplicon lengths (phil's biomark folder on Box)
-# PC_Standards <- read_excel("~/Downloads/PC_Standards.xlsx")
-# colnames(PC_Standards)
-# # rename some columns
-# PC_Standards <- PC_Standards %>%
-#   select("gene" = `Sequence Name`, "amp_len" = `Total size`)
-# 
-# head(PC_Standards)
-# # 16s Assay names need fixed from Phil's to match biomark
-# PC_Standards_no_NA <- PC_Standards %>% 
-#   separate(gene, c("Assay"), sep = -2, remove = F) %>% select(gene, Assay, amp_len) %>%
-#   mutate_all(~gsub("16S_Eub_338", "16S_Eub_338_518", .)) %>%
-#   drop_na()
-# 
-# head(PC_Standards_no_NA)
-# tail(PC_Standards_no_NA)
-# rm(PC_Standards)
-# saveRDS(PC_Standards_no_NA, "../data/ampliconlengths.RDS")
+# File of amplicon lengths (phil's biomark folder on Box)
+PC_Standards <- read_excel("~/Downloads/PC8_Standards.xlsx")
+colnames(PC_Standards)
+# rename some columns
+PC_Standards <- PC_Standards %>%
+  select("gene" = `Sequence Name`, "amp_len" = `Total size`)
+
+head(PC_Standards)
+# 16s Assay names need fixed from Phil's to match biomark
+PC_Standards_no_NA <- PC_Standards %>% 
+  separate(gene, c("Assay"), sep = -2, remove = F) %>% select(gene, Assay, amp_len) %>%
+  mutate_all(~gsub("16S_Eub_338", "16S_Eub_338_518", .)) %>%
+  drop_na()
+
+head(PC_Standards_no_NA)
+tail(PC_Standards_no_NA)
+rm(PC_Standards)
+saveRDS(PC_Standards_no_NA, "../data/ampliconlengths.RDS")
 PC_Standards_no_NA <- readRDS("../data/ampliconlengths.RDS")
 ```
 ```{r}
@@ -390,13 +407,14 @@ plot
 ggsave(filename = "../plots/pultrymanurenwaterCT.png", plot = last_plot(), device = "png")
 ```
 tet genes confer various forms of resistance to the antibiotic tetracycline. 
-tnp genes are involved in DNA integration and DNA recombination...potentialy involved in HGT
+tnp genes are involved in DNA integration and DNA recombination...potentially involved in HGT
 lnuA Lincosamide nucleotidyltransferase
 erm(C) Erythromycin resistance protein
 
 
 After determining that we had limited detection in soil for ARGs, let's move onto the water and tet genes
 ```{r}
+water$Value <- as.numeric(water$Value)
 mwater16S <- meanCT(water, "16S")
 mwatertetH <- meanCT(water, "tetH")
 mwatertetM <- meanCT(water, "tetM")
@@ -553,5 +571,38 @@ ggboxplot(mwatertetbP, x = "sample_number", y = "tetbP", fill = "treatment", add
   scale_fill_viridis_d() 
 
 ggsave("../plots/tetbPwater.png", plot = last_plot(), device = "png")
+```
+# ARGs in soil but not manure, are they in water? 
+```{r}
+soilargs
+aac3_Via <- plot_standard_curve_counts(standard, "aac3-Via")
+tetG_F <- plot_standard_curve_counts(standard, "tetG_F")
+cadC <- plot_standard_curve_counts(standard, "cadC")
+aac3_Via
+tetG_F
+cadC
+```
+# Only tetG_F generated standard curve
+* May wish to investigate why the others did not
+```{r}
+mwatertetG_F <- meanCT(water, "tetG_F")
+tetG_F
+inverse.lm <- lm(data = tetG_F$data, formula = log10(counts+1) ~ as.numeric(Value))
+
+val2 <- mwatertetG_F$Value
+
+mwatertetG_F$tetG_F <- 10 ^ predict(inverse.lm ,data.frame(Value = val2), interval = "predict")[,1]
+
+mwatertetG_F 
+my_comparisons <- list( c("WCS, WCSM"), c("WCS, WCM"), c("WCM, WCSM"))
+ggboxplot(mwatertetG_F, y = "tetG_F", fill = "treatment", add = "jitter", shape = "treatment") +
+  facet_grid(~sample_number) +
+  stat_compare_means(comparisons = my_comparisons)
+  labs(x = "Water Sample", y = "Log 10 tetG_F  gene copies") +
+  scale_y_continuous(trans = 'log10') +
+  scale_fill_viridis_d() 
+
+
+ggsave("../plots/tettetG_Fwater.png", plot = last_plot(), device = "png")
 ```
 
